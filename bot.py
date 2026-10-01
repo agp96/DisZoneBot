@@ -1,5 +1,8 @@
 ﻿
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 import math
 import sqlite3
 import logging
