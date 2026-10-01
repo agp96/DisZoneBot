@@ -290,12 +290,8 @@ async def perform_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat
     context.user_data["res_idx"] = 0
 
     top_results = results[:MAX_RESULTS]
-    texto = TEXTS[lang]["found"].format(n=len(results), mode=mode_text, radio=f"{int(results[-1]['_dist'])}m") + "
-
-"
-    texto += "
-
-".join(format_result(p, i + 1, lang) for i, p in enumerate(top_results))
+    texto = TEXTS[lang]["found"].format(n=len(results), mode=mode_text, radio=f"{int(results[-1]['_dist'])}m") + "\n\n"
+    texto += "\n\n".join(format_result(p, i + 1, lang) for i, p in enumerate(top_results))
 
     keyboard = []
     for i, p in enumerate(top_results, 1):
