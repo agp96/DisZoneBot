@@ -37,7 +37,8 @@ TEXTS = {
         "new_parking": "📍 Envía la ubicación exacta de la nueva plaza y la añadiremos. (Usa /cancel para abortar)",
         "new_parking_added": "✅ Plaza enviada y pendiente de revisión. ¡Gracias por tu aportación!",
         "help": "♿ *DisZoneBot* - Radar de Accesibilidad\n\nComandos disponibles:\n/parking - ♿ Plazas de Aparcamiento PMR\n/newparking - 📍 Añadir nueva plaza PMR al mapa\n/food - 🍽️ Restaurantes y Bares\n/toilets - 🚻 Baños Públicos\n/shopping - 🛒 Supermercados y Tiendas\n/leisure - 🏛️ Ocio y Cultura",
-        "cancelled": "🚫 Operación cancelada. Elige una categoría (ej: /parking) y envía tu ubicación."
+        "cancelled": "🚫 Operación cancelada. Elige una categoría (ej: /parking) y envía tu ubicación.",
+        "distance": "📏 Distancia: ~{dist} m"
     },
     "en": {
         "searching": "🔍 Searching for nearby {mode}...",
@@ -49,7 +50,8 @@ TEXTS = {
         "new_parking": "📍 Send the exact location of the new parking spot and we'll add it. (Use /cancel to abort)",
         "new_parking_added": "✅ Parking spot submitted and pending review. Thank you for your contribution!",
         "help": "♿ *DisZoneBot* - Accessibility Radar\n\nCommands:\n/parking - ♿ Disabled Parking\n/newparking - 📍 Add a new PMR spot to the map\n/food - 🍽️ Restaurants & Bars\n/toilets - 🚻 Public Toilets\n/shopping - 🛒 Supermarkets & Shops\n/leisure - 🏛️ Leisure & Culture",
-        "cancelled": "🚫 Operation cancelled. Choose a category (e.g. /parking) and send your location."
+        "cancelled": "🚫 Operation cancelled. Choose a category (e.g. /parking) and send your location.",
+        "distance": "📏 Distance: ~{dist} m"
     },
 }
 
@@ -446,10 +448,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get("lang", "es")
     await update.message.reply_text(TEXTS[lang]["help"], parse_mode="Markdown")
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Excepción al procesar actualización:", exc_info=context.error)
+
 def main():
     token = os.environ.get("TELEGRAM_TOKEN")
     persistence = PicklePersistence(filepath="bot_data")
     app = Application.builder().token(token).persistence(persistence).build()
+    app.add_error_handler(error_handler)
     
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_start))
