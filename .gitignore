@@ -1,0 +1,25 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+env.bak/
+venv.bak/
+.env
+
+# Base de datos
+plazas.db
+
+# Cache de bot
+bot_data
+
+# Datos locales de ciudades y datasets
+Aparcamientos Ciudades/
+*.csv
+*.dbf
+*.shp
+*.shx
+cities/
