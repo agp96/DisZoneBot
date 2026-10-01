@@ -22,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-WHEELMAP_TOKEN = os.environ.get("WHEELMAP_TOKEN", "868946b30a6c35d76517a94f2d51b9b2")
+WHEELMAP_TOKEN = os.environ.get("WHEELMAP_TOKEN", "")
 MAX_RESULTS = 5
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plazas.db")
 
@@ -200,6 +200,9 @@ def merge_parking(osm: list, local: list, max_res: int) -> list:
     return combined[:max_res]
 
 async def query_wheelmap(lat: float, lon: float, radius: int, categories: list) -> list:
+    if not WHEELMAP_TOKEN:
+        logger.warning("WHEELMAP_TOKEN no configurado en variables de entorno.")
+        return []
     url = "https://accessibility.cloud/place-infos.json"
     params = {
         "appToken": WHEELMAP_TOKEN,
@@ -444,7 +447,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS[lang]["help"], parse_mode="Markdown")
 
 def main():
-    token = os.environ.get("TELEGRAM_TOKEN", "dummy")
+    token = os.environ.get("TELEGRAM_TOKEN")
     persistence = PicklePersistence(filepath="bot_data")
     app = Application.builder().token(token).persistence(persistence).build()
     
