@@ -41,6 +41,7 @@ TEXTS = {
         "new_parking_added": "✅ Plaza enviada y pendiente de revisión. ¡Gracias por tu aportación!",
         "help": "♿ *DisZoneBot* - Radar de Accesibilidad\n\nComandos disponibles:\n/parking - ♿ Plazas de Aparcamiento PMR\n/newparking - 📍 Añadir nueva plaza PMR al mapa\n/food - 🍽️ Restaurantes y Bares\n/toilets - 🚻 Baños Públicos\n/shopping - 🛒 Supermercados y Tiendas\n/leisure - 🏛️ Ocio y Cultura",
         "cancelled": "🚫 Operación cancelada. Elige una categoría (ej: /parking) y envía tu ubicación.",
+        "searching_last_loc": "🔍 Buscando {mode} con tu última ubicación...",
         "distance": "📏 Distancia: ~{dist} m"
     },
     "en": {
@@ -54,6 +55,7 @@ TEXTS = {
         "new_parking_added": "✅ Parking spot submitted and pending review. Thank you for your contribution!",
         "help": "♿ *DisZoneBot* - Accessibility Radar\n\nCommands:\n/parking - ♿ Disabled Parking\n/newparking - 📍 Add a new PMR spot to the map\n/food - 🍽️ Restaurants & Bars\n/toilets - 🚻 Public Toilets\n/shopping - 🛒 Supermarkets & Shops\n/leisure - 🏛️ Leisure & Culture",
         "cancelled": "🚫 Operation cancelled. Choose a category (e.g. /parking) and send your location.",
+        "searching_last_loc": "🔍 Searching for nearby {mode} using your last location...",
         "distance": "📏 Distance: ~{dist} m"
     },
 }
@@ -260,11 +262,62 @@ def format_result(place: dict, idx: int, lang: str) -> str:
     lineas.append(TEXTS[lang]["distance"].format(dist=dist))
     return "\n".join(lineas)
 
+async def perform_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lon: float, mode: str, is_reuse: bool = False):
+    lang = context.user_data.get("lang", "es")
+    mode_text = CATEGORIES[mode][lang]
+    
+    search_msg_key = "searching_last_loc" if is_reuse else "searching"
+    msg = await update.message.reply_text(TEXTS[lang][search_msg_key].format(mode=mode_text))
+    
+    # Búsqueda
+    results = []
+    if mode == "parking":
+        for r in (500, 2000):
+            local_results = spatial_index.query(lat, lon, r)
+            osm_results = await query_overpass(lat, lon, r)
+            results = merge_parking(osm_results, local_results, 50)
+            if results: break
+    else:
+        for r in (1000, 3000):
+            results = await query_wheelmap(lat, lon, r, CATEGORIES[mode]["wm_cats"])
+            if results: break
+            
+    if not results:
+        await msg.edit_text(TEXTS[lang]["not_found"].format(mode=mode_text), parse_mode="Markdown")
+        return
+        
+    context.user_data["results"] = results
+    context.user_data["res_idx"] = 0
+
+    top_results = results[:MAX_RESULTS]
+    texto = TEXTS[lang]["found"].format(n=len(results), mode=mode_text, radio=f"{int(results[-1]['_dist'])}m") + "
+
+"
+    texto += "
+
+".join(format_result(p, i + 1, lang) for i, p in enumerate(top_results))
+
+    keyboard = []
+    for i, p in enumerate(top_results, 1):
+        keyboard.append([InlineKeyboardButton(TEXTS[lang]["directions"].format(name=p["name"]), url=f"https://www.google.com/maps/dir/?api=1&destination={p['lat']},{p['lon']}&travelmode=driving")])
+
+    if len(results) > MAX_RESULTS:
+        keyboard.append([InlineKeyboardButton(TEXTS[lang]["more"], callback_data="more_results")])
+
+    await msg.edit_text(texto, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def set_search_mode(update: Update, context: ContextTypes.DEFAULT_TYPE, mode: str):
     context.user_data["mode"] = mode
     lang = context.user_data.get("lang", "es")
     mode_text = CATEGORIES[mode][lang]
-    await update.message.reply_text(TEXTS[lang]["send_location"].format(mode=mode_text), parse_mode="Markdown")
+    
+    # Si el usuario ya envió su ubicación anteriormente, la reutilizamos de inmediato
+    last_loc = context.user_data.get("last_location")
+    if last_loc:
+        lat, lon = last_loc
+        await perform_search(update, context, lat, lon, mode, is_reuse=True)
+    else:
+        await update.message.reply_text(TEXTS[lang]["send_location"].format(mode=mode_text), parse_mode="Markdown")
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_lang = update.effective_user.language_code
@@ -379,45 +432,10 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Error interno al guardar la plaza.")
         return
 
+    # Guardar la última ubicación para reutilizarla en búsquedas posteriores
+    context.user_data["last_location"] = (lat, lon)
     mode = context.user_data.get("mode", "parking")
-
-    lang = context.user_data.get("lang", "es")
-    
-    mode_text = CATEGORIES[mode][lang]
-    msg = await update.message.reply_text(TEXTS[lang]["searching"].format(mode=mode_text))
-    
-    # Búsqueda
-    results = []
-    if mode == "parking":
-        for r in (500, 2000):
-            local_results = spatial_index.query(lat, lon, r)
-            osm_results = await query_overpass(lat, lon, r)
-            results = merge_parking(osm_results, local_results, 50)
-            if results: break
-    else:
-        for r in (1000, 3000):
-            results = await query_wheelmap(lat, lon, r, CATEGORIES[mode]["wm_cats"])
-            if results: break
-            
-    if not results:
-        await msg.edit_text(TEXTS[lang]["not_found"].format(mode=mode_text), parse_mode="Markdown")
-        return
-        
-    context.user_data["results"] = results
-    context.user_data["res_idx"] = 0
-
-    top_results = results[:MAX_RESULTS]
-    texto = TEXTS[lang]["found"].format(n=len(results), mode=mode_text, radio=f"{int(results[-1]['_dist'])}m") + "\n\n"
-    texto += "\n\n".join(format_result(p, i + 1, lang) for i, p in enumerate(top_results))
-
-    keyboard = []
-    for i, p in enumerate(top_results, 1):
-        keyboard.append([InlineKeyboardButton(TEXTS[lang]["directions"].format(name=p["name"]), url=f"https://www.google.com/maps/dir/?api=1&destination={p['lat']},{p['lon']}&travelmode=driving")])
-
-    if len(results) > MAX_RESULTS:
-        keyboard.append([InlineKeyboardButton(TEXTS[lang]["more"], callback_data="more_results")])
-
-    await msg.edit_text(texto, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+    await perform_search(update, context, lat, lon, mode, is_reuse=False)
 
 async def more_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
